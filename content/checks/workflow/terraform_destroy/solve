@@ -1,0 +1,2 @@
+#!/bin/bash -e
+terraform -chdir=/terraform_basics destroy -auto-approve
