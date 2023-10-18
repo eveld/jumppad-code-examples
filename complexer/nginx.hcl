@@ -11,6 +11,8 @@ resource "certificate_ca" "root" {
   output = data("certs")
 }
 
+// Generate lets encrypt certs
+
 // Use the CA certificate to generate a leaf certificate
 resource "certificate_leaf" "cert" {
   ca_key = resource.certificate_ca.root.private_key.path
@@ -42,7 +44,10 @@ resource "template" "loadbalancer_conf" {
   destination = "${data("nginx")}/loadbalancer.conf"
 
   variables = {
-    servers = ["${resource.container.nginx.network[0].assigned_address}:${resource.container.nginx.port[0].local}"]
+    servers = [
+      "${resource.container.nginx_1.network[0].assigned_address}:${resource.container.nginx_1.port[0].local}",
+      "${resource.container.nginx_2.network[0].assigned_address}:${resource.container.nginx_2.port[0].local}"
+    ]
   }
 }
 
@@ -82,7 +87,7 @@ resource "container" "loadbalancer" {
 }
 
 // Nginx container that listens on port 443
-resource "container" "nginx" {
+resource "container" "nginx_1" {
   image {
     name = "nginx:mainline-alpine3.18-slim"
   }
@@ -115,7 +120,46 @@ resource "container" "nginx" {
     timeout = "10s"
     
     http {
-      address = "http://nginx.container.jumppad.dev/index.html"
+      address = "http://nginx_1.container.jumppad.dev/index.html"
+      success_codes = [200]
+    }
+   }
+}
+
+resource "container" "nginx_2" {
+  image {
+    name = "nginx:mainline-alpine3.18-slim"
+  }
+
+  network {
+    id = resource.network.main.id
+  }
+
+  resources {
+    memory = 256
+  }
+
+  volume {
+    source = resource.template.index_html.destination
+    destination = "/usr/share/nginx/html/index.html"
+  }
+
+  volume {
+    source = "files/nginx.conf"
+    destination = "/etc/nginx/conf.d/default.conf"
+  }
+
+  port {
+    local = 80
+    remote = 80
+    host = 81
+  }
+
+   health_check {
+    timeout = "10s"
+    
+    http {
+      address = "http://nginx_2.container.jumppad.dev:81/index.html"
       success_codes = [200]
     }
    }
